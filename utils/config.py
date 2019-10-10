@@ -22,11 +22,11 @@ parser.add_argument('-bsz','--batch', help='Batch_size', required=False, type=in
 parser.add_argument('-hdsize','--hidden_size', help='Hidden size', required=False, type=int, default=200)
 parser.add_argument('-embsize','--embed_size', help='Embedding size', required=False, type=int, default=200)
 
-parser.add_argument('-pes','--pretrained_embed_size', help='Pretained embedding path', required=False, type=str, default="data/zhwiki.lsn.char")
+parser.add_argument('-pes','--pretrained_embed_size', help='Pretained char-level Chinese embedding path', required=True, type=str)
 
-parser.add_argument('-trp','--train_path', help='Training data path, exmaple: "右手司机自己轿车。\t右手司机自己叫车。" for each line', required=False, type=str, default="data/train.txt")
-parser.add_argument('-vap','--valid_path', help='Validating data path, exmaple: "右手司机自己轿车。\t右手司机自己叫车。" for each line', required=False, type=str, default="data/valid.txt")
-parser.add_argument('-tsp','--test_path',  help='Testing data path, exmaple: "右手司机自己轿车。\t右手司机自己叫车。" for each line', required=False, type=str, default="data/test.txt")
+parser.add_argument('-trp','--train_path', help='Training data path, exmaple: "右手司机自己轿车。\t右手司机自己叫车。" for each line', required=True, type=str)
+parser.add_argument('-vap','--valid_path', help='Validating data path, exmaple: "右手司机自己轿车。\t右手司机自己叫车。" for each line', required=True, type=str)
+parser.add_argument('-tsp','--test_path',  help='Testing data path, exmaple: "右手司机自己轿车。\t右手司机自己叫车。" for each line', required=True, type=str)
 
 parser.add_argument('-clip','--clip', help='gradient clipping', required=False, default=10, type=int)
 parser.add_argument('-all_vocab','--all_vocab', help='', required=False, default=1, type=int)
