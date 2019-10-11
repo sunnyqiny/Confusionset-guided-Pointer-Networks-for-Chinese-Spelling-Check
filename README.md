@@ -4,7 +4,11 @@
 * Python 37
 * Pytorch 0.4
 * numpy
+## Train a model for Chinese Spelling Check
+```
+>>> python train.py -pes=  -trp= -vap=your -tsp=
 
+```
 ## Reference Resources
 ---
 

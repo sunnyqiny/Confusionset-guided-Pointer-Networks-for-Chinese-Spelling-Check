@@ -4,7 +4,7 @@
 # @Description: Model
 
 import torch.nn as nn
-from utils.config import  *
+from utils.config import *
 import json
 import random
 import numpy as np
@@ -18,7 +18,7 @@ from utils.evaluation_metrics import *
 
 class ConfusionGuide(nn.Module):
 
-    def __init__(self, lang, vocab_size, embed_size, hidden_size, confusionset, path=None):
+    def __init__(self, lang, vocab_size, embed_size, hidden_size, dropout, confusionset, path=None):
         super(ConfusionGuide, self).__init__()
         self.name = "Confusionset-guided model"
         self.lang = lang
@@ -26,8 +26,9 @@ class ConfusionGuide(nn.Module):
         self.vocab_size = vocab_size
         self.embed_size = embed_size
         self.hidden_size = hidden_size
-        self.Encoder = Encoder(vocab_size, embed_size, hidden_size, isBidirectional=True)
-        self.Decoder = AttnDecoder(lang, vocab_size, embed_size, hidden_size, self.Encoder.Embed, self.confusionset)
+        self.dropout = dropout
+        self.Encoder = Encoder(vocab_size, embed_size, hidden_size, dropout, isBidirectional=True)
+        self.Decoder = AttnDecoder(lang, vocab_size, embed_size, hidden_size, self.Encoder.Embed, self.Encoder.embed_dropout_layer, self.confusionset)
 
         if path:
             if USE_CUDA:
@@ -73,6 +74,14 @@ class ConfusionGuide(nn.Module):
         self.optimizer.zero_grad()
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
         all_vocab_logits, all_gate_logits, all_predict_words = self.encoder_decoder(input_seqs, input_seqs_len, target_seqs, use_teacher_forcing)
+
+        # print("all_vocab_logits:", all_vocab_logits.size())
+        # print(all_vocab_logits)
+        # print("target_seqs:", target_seqs.size())
+        # print(target_seqs)
+        # print("target_seqs_length:", target_seqs_length.size())
+        # print(target_seqs_length)
+        # exit(0)
         loss_vocab = compute_loss(all_vocab_logits, target_seqs, target_seqs_length)
         loss_gate = compute_loss(all_gate_logits, target_gates, target_seqs_length)
 
@@ -109,7 +118,7 @@ class ConfusionGuide(nn.Module):
            """
             all_vocab_logits, all_gate_logits, all_predict_words = self.encoder_decoder(data["src_seq_index"], data["src_len"], data["tgt_seq_index"], False)
             final_results.append((data["src_seq"][0], data["tgt_seq"][0], "".join(all_predict_words[0])))
-        detection_f1 = compute_prf(final_results)
+        detection_f1, correction_f1 = compute_prf(final_results)
         if detection_f1 > bestF1:
             bestF1 = detection_f1
             directory = 'save/models/detectionF1-{}'.format(detection_f1)
@@ -118,12 +127,12 @@ class ConfusionGuide(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__(self, vocab_size, embed_size, hidden_size, num_layers = 1, isBidirectional=False):
+    def __init__(self, vocab_size, embed_size, hidden_size, num_layers = 1, dropout=0.5, isBidirectional=False):
         super(Encoder, self).__init__()
         self.vocab_size = vocab_size
         self.isBidirectional = isBidirectional
         self.hidden_size = int(hidden_size / 2) if isBidirectional else hidden_size
-
+        self.embed_dropout_layer = nn.Dropout(dropout)
         self.num_layers = num_layers
         self.embed_size = embed_size
         self.Embed = nn.Embedding(vocab_size, embed_size, padding_idx=PAD_token)
@@ -136,6 +145,10 @@ class Encoder(nn.Module):
             self.Embed.weight.data.copy_(new(E))
 
         self.lstm = nn.LSTM(self.embed_size, self.hidden_size, bidirectional=isBidirectional)
+        if USE_CUDA:
+            self.lstm = self.lstm.cuda()
+            self.embed_dropout_layer = self.embed_dropout_layer()
+            self.Embed = self.Embed.cuda()
 
     def get_state(self, input_seqs):
         batch_size = input_seqs.size(1)
@@ -151,6 +164,7 @@ class Encoder(nn.Module):
 
     def forward(self, input_sequence, input_sequence_len=None, hidden=None):
         embed = self.Embed(input_sequence)
+        embed = self.embed_dropout_layer(embed)
         hidden = self.get_state(input_sequence)
         if input_sequence_len is not None:
             packpad_embed = nn.utils.rnn.pack_padded_sequence(embed, input_sequence_len, batch_first=False)
@@ -167,7 +181,7 @@ class Encoder(nn.Module):
 
 class AttnDecoder(nn.Module):
 
-    def __init__(self, lang, vocab_size, embed_size, hidden_size, shared_embedding_from_encoder, confusionset, max_input_len=150):
+    def __init__(self, lang, vocab_size, embed_size, hidden_size, shared_embedding_from_encoder,shared_dropoutlayer_from_encoder, confusionset, max_input_len=150):
         super(AttnDecoder, self).__init__()
         self.lang = lang
         self.v = nn.Parameter(torch.rand(hidden_size))
@@ -176,14 +190,21 @@ class AttnDecoder(nn.Module):
         self.confusionset = confusionset
         self.vocab_size = vocab_size
         self.embed_size = embed_size
+        self.embed_dropout_layer = shared_dropoutlayer_from_encoder
         self.hidden_size = hidden_size
         self.W1 = nn.Linear(2 * hidden_size, hidden_size)
-        self.gate = nn.Linear(hidden_size + max_input_len, max_input_len)
+        self.gate = nn.Linear(self.hidden_size + max_input_len, max_input_len)
         self.max_input_len = max_input_len
         self.Embed = shared_embedding_from_encoder
         self.sigmoid = nn.Sigmoid()
         self.lstm = nn.LSTM(embed_size, hidden_size)
-        self.concat = nn.Linear(hidden_size * 2, hidden_size)
+        self.concat = nn.Linear(2 * self.hidden_size, hidden_size)
+        self.U = nn.Linear(hidden_size, self.vocab_size)
+        if USE_CUDA:
+            self.U = self.U.cuda()
+            self.lstm = self.lstm.cuda()
+            self.W1 = self.W1
+            self.gate = self.gate.cuda()
 
     def forward(self, encoder_outputs, encoder_hidden, encoder_seqs_index, encoder_seqs_len, decoder_targets, use_teacher_forcing=False):
 
@@ -208,25 +229,34 @@ class AttnDecoder(nn.Module):
         decoder_hidden = encoder_hidden
         for i in range(max_decoder_len):
             decoder_input = self.Embed(decoder_input)
+            decoder_input = self.embed_dropout_layer(decoder_input)
             decoder_output, decoder_hidden = self.lstm(decoder_input.unsqueeze(0), (decoder_hidden, decoder_hidden))
             decoder_hidden = decoder_hidden[0]
             C_j = self.attention(encoder_outputs, decoder_hidden, encoder_seqs_len)  # C_j = B * hidden_size
 
             wordindex_in_encoder = encoder_seqs_index[:, i]
-            M = torch.tensor([-np.inf])
-            M = M.expand(batch_size, self.lang.n_words)
+            M = torch.zeros(1)
+            M = M.repeat(batch_size, self.lang.n_words)
             for wordindex in range(wordindex_in_encoder.size(0)):
                 tmp_word = self.lang.index2word[wordindex_in_encoder[wordindex].item()]
                 if tmp_word in self.confusionset:
                     confusion_words = self.confusionset[tmp_word]
                     confusion_words_index = torch.tensor([self.lang.word2index[w] for w in confusion_words])
                     ones = torch.ones(len(confusion_words))
-                    tmp_M = torch.zeros(self.lang.n_words)
+                    tmp_M = torch.ones(self.lang.n_words)
                     tmp_M.scatter_(0, confusion_words_index, ones)
                     M[wordindex] = tmp_M
+
+            M = M.detach()
             if USE_CUDA:
                 M = M.cuda()
-            p_vocab = self.attention_vocab(self.Embed.weight, C_j, M)
+            p_vocab_logits = self.U(C_j)
+
+            p_vocab_softmax = F.log_softmax( p_vocab_logits, dim=1)
+            p_vocab = p_vocab_softmax.mul(M)
+
+
+            #p_vocab = self.attention_vocab(self.Embed.weight, C_j, M)
             _, topvi = p_vocab.data.topk(1)
 
             Loc = torch.zeros(batch_size, self.max_input_len)
@@ -237,10 +267,11 @@ class AttnDecoder(nn.Module):
             pointer_dis = F.softmax(self.gate(torch.cat([C_j, Loc], dim=1)), dim=1)
             _, toppi = pointer_dis.data.topk(1)
 
+
             all_vocab_logits[:, i, :] = p_vocab
             all_gate_logits[:, i, :] = pointer_dis
 
-            next_in = [encoder_seqs_index[batch_i][toppi[batch_i].item()] if (
+            next_in = [encoder_seqs_index[batch_i][toppi[batch_i].item()].item() if (
                         toppi[batch_i].item() < encoder_seqs_len[batch_i] - 1)
                         else topvi[batch_i].item() for batch_i in range(batch_size)]
 
@@ -279,10 +310,10 @@ class AttnDecoder(nn.Module):
         C_j = torch.tanh(self.concat(concat_input))
         return C_j
 
-    def attention_vocab(self, embed, hidden, M):
-        scores = hidden.matmul(embed.transpose(1, 0))
-        softmax_scores = F.softmax(scores, dim=1)
-        softmax_scores = torch.mul(softmax_scores, M)
-        return softmax_scores
+    # def attention_vocab(self, embed, hidden, M):
+    #     scores = hidden.matmul(embed.transpose(1, 0))
+    #     softmax_scores = F.softmax(scores, dim=1)
+    #     softmax_scores = torch.mul(softmax_scores, M)
+    #     return softmax_scores
 
 

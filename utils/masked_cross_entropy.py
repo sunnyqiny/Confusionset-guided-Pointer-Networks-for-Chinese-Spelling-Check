@@ -46,11 +46,11 @@ def compute_loss(logits, target, length):
     logits_flat = logits.view(-1, logits.size(-1))
 
     # log_probs_flat: (batch * max_len, num_classes)
-    log_probs_flat = functional.log_softmax(logits_flat, dim=1)
+    #log_probs_flat = functional.log_softmax(logits_flat, dim=1)
     # target_flat: (batch * max_len, 1)
     target_flat = target.view(-1, 1)
     # losses_flat: (batch * max_len, 1)
-    losses_flat = -torch.gather(log_probs_flat, dim=1, index=target_flat)
+    losses_flat = -torch.gather(logits_flat, dim=1, index=target_flat)
 
     # losses: (batch, max_len)
     losses = losses_flat.view(target.size())

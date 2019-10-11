@@ -44,14 +44,14 @@ def compute_prf(results):
         all_predict_true_index.append(each_true_index)
 
     # For the detection Precision, Recall and F1
-    detection_precision = TP / (TP + FP)
-    detection_recall = TP / (TP + FN)
-    detection_f1 = 2 * (detection_precision * detection_recall) / (detection_precision + detection_recall)
+    detection_precision = TP / (TP + FP) if (TP+FP) > 0 else 0
+    detection_recall = TP / (TP + FN) if (TP+FN) > 0 else 0
+    detection_f1 = 2 * (detection_precision * detection_recall) / (detection_precision + detection_recall) if (detection_precision + detection_recall) > 0 else 0
     logging.info("The detection result is precision={}, recall={} and F1={}".format(detection_precision, detection_recall, detection_f1))
 
-    TP = 1
-    FP = 1
-    FN = 1
+    TP = 0
+    FP = 0
+    FN = 0
 
     for i in range(len( all_predict_true_index)):
         # we only detect those correctly detected location, which is a different from the common metrics since
@@ -71,16 +71,21 @@ def compute_prf(results):
                     FN += 1
 
     # For the correction Precision, Recall and F1
-    correction_precision = TP / (TP + FP)
-    correction_recall = TP / (TP + FN)
-    correction_f1 = 2 * (correction_precision * correction_recall) / (correction_precision + correction_recall)
+    correction_precision = TP / (TP + FP) if (TP+FP) > 0 else 0
+    correction_recall = TP / (TP + FN) if (TP+FN) > 0 else 0
+    correction_f1 = 2 * (correction_precision * correction_recall) / (correction_precision + correction_recall) if (correction_precision + correction_recall) > 0 else 0
     logging.info("The correction  result is precision={}, recall={} and F1={}".format(correction_precision, correction_recall, correction_f1))
 
-    return detection_f1
+    return detection_f1, correction_f1
 
 
 
 
+if __name__ == "__main__":
+    #result = [("abcde","abzdz","zbydz")]
+    result = [("abcde", "abzdz", "zbzdz")]
+
+    print(compute_prf(result))
 
 
 

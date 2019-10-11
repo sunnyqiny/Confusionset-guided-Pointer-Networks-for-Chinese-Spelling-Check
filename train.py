@@ -2,13 +2,14 @@
 # coding: utf-8
 # @Author: Dimmy(wangdimmy@gmail.com)
 # @Description: Train
+# @Usage command: python train.py -pes=data/zhwiki.lsn.char -trp=data/train.txt -vap=data/valid.txt -tsp=data/test.txt
 
 from models.csc import *
 from utils.prepare_data import *
 
 train, dev, test, lang, confusionset = prepare_data_seq(training=True, batch_size=int(args['batch']))
 print("The number of words={}".format(lang.n_words))
-model = ConfusionGuide(lang=lang, vocab_size=lang.n_words, embed_size=int(args['embed_size']), hidden_size=int(args['hidden_size']), confusionset=confusionset)
+model = ConfusionGuide(lang=lang, vocab_size=lang.n_words, embed_size=int(args['embed_size']), hidden_size=int(args['hidden_size']), dropout=args['dropout'], confusionset=confusionset)
 
 
 bestF1 = 0.0
