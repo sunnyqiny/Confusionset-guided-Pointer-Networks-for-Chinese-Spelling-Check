@@ -81,14 +81,4 @@ def compute_prf(results):
 
 
 
-if __name__ == "__main__":
-    #result = [("abcde","abzdz","zbydz")]
-    result = [("abcde", "abzdz", "zbzdz")]
-
-    print(compute_prf(result))
-
-
-
-
-
 
