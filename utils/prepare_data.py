@@ -177,14 +177,17 @@ def prepare_data_seq(training, batch_size=100):
     if training:
         pair_train = read_langs(file_train, lang, training)
         train = get_seq(pair_train, lang, batch_size)
-        pair_dev = read_langs(file_dev, lang, training)
+        pair_dev = read_langs(file_dev, lang, training=False)
         dev = get_seq(pair_dev, lang, 1)
-        pair_test = read_langs(file_test, lang,training)
+        pair_test = read_langs(file_test, lang, training=False)
         test = get_seq(pair_test, lang, 1)
 
-        lang_name = 'lang-all.pkl' if args["all_vocab"] else 'lang-train.pkl'
+        lang_name = 'lang-all.pkl'
 
         print("[Info] Loading saved lang files...")
+        if not os.path.exists("save/"):
+            os.makedirs("save/")
+
         with open("save/" + lang_name, 'wb') as handle:
             pickle.dump(lang, handle)
 
