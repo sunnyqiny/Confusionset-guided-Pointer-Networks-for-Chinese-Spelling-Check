@@ -243,7 +243,7 @@ class AttnDecoder(nn.Module):
                     confusion_words = self.confusionset[tmp_word]
                     confusion_words_index = torch.tensor([self.lang.word2index[w] for w in confusion_words])
                     ones = torch.ones(len(confusion_words))
-                    tmp_M = torch.ones(self.lang.n_words)
+                    tmp_M = torch.zeros(self.lang.n_words)
                     tmp_M.scatter_(0, confusion_words_index, ones)
                     M[wordindex] = tmp_M
 
